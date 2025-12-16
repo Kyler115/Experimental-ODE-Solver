@@ -97,7 +97,7 @@
       transform: none;
     }
 
-    .results { display: flex; flex-direction: column; gap: 20px; }
+    .results { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
 
     .solution-box {
       background: #f8f9fa;
@@ -623,19 +623,27 @@ json.dumps(result)
     }
 
     function displayResults1D(result) {
+      // Guard against malformed results
+      if (!result || !Array.isArray(result.t_vals) || !Array.isArray(result.x_vals)) {
+        const details = result ? JSON.stringify(result) : 'null/undefined result';
+        document.getElementById('status').innerHTML =
+          `<div class="error">❌ Solver returned no data to plot.<br><small>${escapeHtml(details)}</small></div>`;
+        return;
+      }
+
       let html = '<div class="solution-box">';
       html += '<h3>📊 Solution Information</h3>';
-      html += `<div class="method-badge">${escapeHtml(result.method)}</div>`;
+      html += `<div class="method-badge">${escapeHtml(result.method || 'Unknown')}</div>`;
 
       if (result.algebraic_found) {
         html += '<div class="solution-item">';
         html += '<strong>General Solution:</strong><br>';
-        html += `x(t) = ${escapeHtml(result.general_solution)}`;
+        html += `x(t) = ${escapeHtml(result.general_solution || '')}`;
         html += '</div>';
 
         html += '<div class="solution-item">';
         html += '<strong>Particular Solution (with initial conditions):</strong><br>';
-        html += `x(t) = ${escapeHtml(result.particular_solution)}`;
+        html += `x(t) = ${escapeHtml(result.particular_solution || '')}`;
         html += '</div>';
       } else {
         html += '<div class="solution-item">';
@@ -699,21 +707,29 @@ base64.b64encode(buf.read()).decode('utf-8')
     }
 
     function displayResults2D(result) {
+      // Guard against malformed results
+      if (!result || !Array.isArray(result.t_vals) || !Array.isArray(result.x_vals) || !Array.isArray(result.y_vals)) {
+        const details = result ? JSON.stringify(result) : 'null/undefined result';
+        document.getElementById('status').innerHTML =
+          `<div class="error">❌ Solver returned no data to plot.<br><small>${escapeHtml(details)}</small></div>`;
+        return;
+      }
+
       let html = '<div class="solution-box">';
       html += '<h3>📊 Solution Information</h3>';
-      html += `<div class="method-badge">${escapeHtml(result.method)}</div>`;
+      html += `<div class="method-badge">${escapeHtml(result.method || 'Unknown')}</div>`;
 
       if (result.algebraic_found) {
         html += '<div class="solution-item">';
         html += '<strong>General Solutions:</strong><br>';
-        html += `x(t) = ${escapeHtml(result.general_solution_x)}<br>`;
-        html += `y(t) = ${escapeHtml(result.general_solution_y)}`;
+        html += `x(t) = ${escapeHtml(result.general_solution_x || '')}<br>`;
+        html += `y(t) = ${escapeHtml(result.general_solution_y || '')}`;
         html += '</div>';
 
         html += '<div class="solution-item">';
         html += '<strong>Particular Solutions (with initial conditions):</strong><br>';
-        html += `x(t) = ${escapeHtml(result.particular_solution_x)}<br>`;
-        html += `y(t) = ${escapeHtml(result.particular_solution_y)}`;
+        html += `x(t) = ${escapeHtml(result.particular_solution_x || '')}<br>`;
+        html += `y(t) = ${escapeHtml(result.particular_solution_y || '')}`;
         html += '</div>';
       } else {
         html += '<div class="solution-item">';
