@@ -305,6 +305,19 @@
   </div>
 
   <script type="text/javascript">
+        // ---------- safety helpers ----------
+        function safeLast(arr, fallback = null) {
+            return (Array.isArray(arr) && arr.length > 0) ? arr[arr.length - 1] : fallback;
+        }
+        function escapeHtml(str) {
+            return String(str)
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;')
+                .replaceAll("'", '&#39;');
+        }
+        // -----------------------------------
     let pyodide = null;
     let currentTab = '1d';
 
@@ -656,7 +669,7 @@ json.dumps(result)
 
       html += '<div class="solution-item">';
       html += '<strong>Final Value:</strong><br>';
-      const xf = result.x_vals[result.x_vals.length - 1];
+      const xf = safeLast(result.x_vals, NaN);
       html += `x(t_final) = ${Number(xf).toFixed(6)}`;
       html += '</div>';
 
@@ -742,8 +755,8 @@ base64.b64encode(buf.read()).decode('utf-8')
 
       html += '<div class="solution-item">';
       html += '<strong>Final Values:</strong><br>';
-      const xf = result.x_vals[result.x_vals.length - 1];
-      const yf = result.y_vals[result.y_vals.length - 1];
+      const xf = safeLast(result.x_vals, NaN);
+      const yf = safeLast(result.y_vals, NaN);
       html += `x(t_final) = ${Number(xf).toFixed(6)}<br>`;
       html += `y(t_final) = ${Number(yf).toFixed(6)}`;
       html += '</div>';
