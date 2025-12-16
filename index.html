@@ -690,17 +690,25 @@ json.dumps(result)
                 html += '</div>';
             }
             
+            // Add final values
+            html += '<div class="solution-item">';
+            html += '<strong>Final Values:</strong><br>';
+            html += `x(t_final) = ${result.x_vals[result.x_vals.length-1].toFixed(4)}<br>`;
+            html += `y(t_final) = ${result.y_vals[result.y_vals.length-1].toFixed(4)}`;
+            html += '</div>';
+            
             html += '</div>';
             document.getElementById('solution-info').innerHTML = html;
             
-            // Time series plot
+            // Time series plot with separate y-axes
             const trace1 = {
                 x: result.t_vals,
                 y: result.x_vals,
                 type: 'scatter',
                 mode: 'lines',
                 name: 'x(t)',
-                line: {color: '#667eea', width: 3}
+                line: {color: '#667eea', width: 3},
+                yaxis: 'y'
             };
             
             const trace2 = {
@@ -709,7 +717,8 @@ json.dumps(result)
                 type: 'scatter',
                 mode: 'lines',
                 name: 'y(t)',
-                line: {color: '#f093fb', width: 3}
+                line: {color: '#f093fb', width: 3},
+                yaxis: 'y2'
             };
             
             const traces = [trace1, trace2];
@@ -722,7 +731,8 @@ json.dumps(result)
                     mode: 'lines',
                     name: 'x(t) RK45',
                     line: {color: '#667eea', width: 1, dash: 'dash'},
-                    opacity: 0.6
+                    opacity: 0.6,
+                    yaxis: 'y'
                 });
                 traces.push({
                     x: result.t_vals,
@@ -731,26 +741,46 @@ json.dumps(result)
                     mode: 'lines',
                     name: 'y(t) RK45',
                     line: {color: '#f093fb', width: 1, dash: 'dash'},
-                    opacity: 0.6
+                    opacity: 0.6,
+                    yaxis: 'y2'
                 });
             }
             
             const layout1 = {
-                title: 'Time Series',
+                title: 'Time Series (Dual Y-Axis)',
                 xaxis: {title: 'Time t'},
-                yaxis: {title: 'Values'},
+                yaxis: {
+                    title: 'x(t)',
+                    titlefont: {color: '#667eea'},
+                    tickfont: {color: '#667eea'}
+                },
+                yaxis2: {
+                    title: 'y(t)',
+                    titlefont: {color: '#f093fb'},
+                    tickfont: {color: '#f093fb'},
+                    overlaying: 'y',
+                    side: 'right'
+                },
                 plot_bgcolor: '#f8f9fa',
-                paper_bgcolor: 'white'
+                paper_bgcolor: 'white',
+                height: 500
             };
             
-            // Phase plot
+            // Phase plot with better scaling
             const phaseTrace = {
                 x: result.x_vals,
                 y: result.y_vals,
                 type: 'scatter',
-                mode: 'lines',
+                mode: 'lines+markers',
                 name: result.method,
-                line: {color: '#667eea', width: 3}
+                line: {color: '#667eea', width: 3},
+                marker: {
+                    size: 4,
+                    color: result.t_vals,
+                    colorscale: 'Viridis',
+                    showscale: true,
+                    colorbar: {title: 'Time'}
+                }
             };
             
             const phaseTraces = [phaseTrace];
@@ -767,12 +797,33 @@ json.dumps(result)
                 });
             }
             
+            // Add start and end markers
+            phaseTraces.push({
+                x: [result.x_vals[0]],
+                y: [result.y_vals[0]],
+                type: 'scatter',
+                mode: 'markers',
+                name: 'Start',
+                marker: {size: 15, color: 'green', symbol: 'circle'}
+            });
+            
+            phaseTraces.push({
+                x: [result.x_vals[result.x_vals.length-1]],
+                y: [result.y_vals[result.y_vals.length-1]],
+                type: 'scatter',
+                mode: 'markers',
+                name: 'End',
+                marker: {size: 15, color: 'red', symbol: 'square'}
+            });
+            
             const layout2 = {
                 title: 'Phase Plot',
-                xaxis: {title: 'x'},
-                yaxis: {title: 'y'},
+                xaxis: {title: 'x (Prey/Resource)'},
+                yaxis: {title: 'y (Predator/Consumer)'},
                 plot_bgcolor: '#f8f9fa',
-                paper_bgcolor: 'white'
+                paper_bgcolor: 'white',
+                height: 500,
+                hovermode: 'closest'
             };
             
             document.getElementById('plots').innerHTML = `
