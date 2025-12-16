@@ -640,28 +640,54 @@ json.dumps(result)
                 html += '</div>';
             }
             
+            html += '<div class="solution-item">';
+            html += '<strong>Final Value:</strong><br>';
+            html += `x(t_final) = ${result.x_vals[result.x_vals.length-1].toFixed(6)}`;
+            html += '</div>';
+            
             html += '</div>';
             document.getElementById('solution-info').innerHTML = html;
             
-            // Plot
-            const trace = {
-                x: result.t_vals,
-                y: result.x_vals,
-                type: 'scatter',
-                mode: 'lines',
-                name: 'x(t)',
-                line: {color: '#667eea', width: 3}
-            };
+            // Generate matplotlib plot
+            generateMatplotlibPlot1D(result);
+        }
+        
+        async function generateMatplotlibPlot1D(result) {
+            const plotCode = `
+import matplotlib.pyplot as plt
+import numpy as np
+import base64
+from io import BytesIO
+
+t_vals = np.array(${JSON.stringify(result.t_vals)})
+x_vals = np.array(${JSON.stringify(result.x_vals)})
+
+fig, ax = plt.subplots(figsize=(12, 7))
+ax.plot(t_vals, x_vals, 'b-', linewidth=3, label='x(t)')
+ax.set_xlabel('Time t', fontsize=14)
+ax.set_ylabel('x(t)', fontsize=14)
+ax.set_title('Solution: x(t) vs t (${result.method})', fontsize=16, fontweight='bold')
+ax.legend(fontsize=12)
+ax.grid(True, alpha=0.3)
+
+# Save to base64
+buf = BytesIO()
+plt.savefig(buf, format='png', dpi=100, bbox_inches='tight')
+buf.seek(0)
+img_base64 = base64.b64encode(buf.read()).decode('utf-8')
+plt.close()
+
+img_base64
+`;
+
+            const imgBase64 = await pyodide.runPythonAsync(plotCode);
             
-            const layout = {
-                title: 'Solution: x(t) vs t',
-                xaxis: {title: 'Time t'},
-                yaxis: {title: 'x(t)'},
-                plot_bgcolor: '#f8f9fa',
-                paper_bgcolor: 'white'
-            };
-            
-            Plotly.newPlot('plots', [trace], layout);
+            document.getElementById('plots').innerHTML = `
+                <div class="plot-container">
+                    <h3 style="color: #667eea; margin-bottom: 15px;">📈 Solution Plot</h3>
+                    <img src="data:image/png;base64,${imgBase64}" style="width: 100%; max-width: 1200px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+                </div>
+            `;
         }
         
         function displayResults2D(result) {
@@ -700,139 +726,84 @@ json.dumps(result)
             html += '</div>';
             document.getElementById('solution-info').innerHTML = html;
             
-            // Time series plot with separate y-axes
-            const trace1 = {
-                x: result.t_vals,
-                y: result.x_vals,
-                type: 'scatter',
-                mode: 'lines',
-                name: 'x(t)',
-                line: {color: '#667eea', width: 3},
-                yaxis: 'y'
-            };
-            
-            const trace2 = {
-                x: result.t_vals,
-                y: result.y_vals,
-                type: 'scatter',
-                mode: 'lines',
-                name: 'y(t)',
-                line: {color: '#f093fb', width: 3},
-                yaxis: 'y2'
-            };
-            
-            const traces = [trace1, trace2];
-            
-            if (result.x_rk45) {
-                traces.push({
-                    x: result.t_vals,
-                    y: result.x_rk45,
-                    type: 'scatter',
-                    mode: 'lines',
-                    name: 'x(t) RK45',
-                    line: {color: '#667eea', width: 1, dash: 'dash'},
-                    opacity: 0.6,
-                    yaxis: 'y'
-                });
-                traces.push({
-                    x: result.t_vals,
-                    y: result.y_rk45,
-                    type: 'scatter',
-                    mode: 'lines',
-                    name: 'y(t) RK45',
-                    line: {color: '#f093fb', width: 1, dash: 'dash'},
-                    opacity: 0.6,
-                    yaxis: 'y2'
-                });
-            }
-            
-            const layout1 = {
-                title: 'Time Series (Dual Y-Axis)',
-                xaxis: {title: 'Time t'},
-                yaxis: {
-                    title: 'x(t)',
-                    titlefont: {color: '#667eea'},
-                    tickfont: {color: '#667eea'}
-                },
-                yaxis2: {
-                    title: 'y(t)',
-                    titlefont: {color: '#f093fb'},
-                    tickfont: {color: '#f093fb'},
-                    overlaying: 'y',
-                    side: 'right'
-                },
-                plot_bgcolor: '#f8f9fa',
-                paper_bgcolor: 'white',
-                height: 500
-            };
-            
-            // Phase plot with better scaling
-            const phaseTrace = {
-                x: result.x_vals,
-                y: result.y_vals,
-                type: 'scatter',
-                mode: 'lines+markers',
-                name: result.method,
-                line: {color: '#667eea', width: 3},
-                marker: {
-                    size: 4,
-                    color: result.t_vals,
-                    colorscale: 'Viridis',
-                    showscale: true,
-                    colorbar: {title: 'Time'}
-                }
-            };
-            
-            const phaseTraces = [phaseTrace];
-            
-            if (result.x_rk45) {
-                phaseTraces.push({
-                    x: result.x_rk45,
-                    y: result.y_rk45,
-                    type: 'scatter',
-                    mode: 'lines',
-                    name: 'RK45',
-                    line: {color: '#f093fb', width: 1, dash: 'dash'},
-                    opacity: 0.6
-                });
-            }
-            
-            // Add start and end markers
-            phaseTraces.push({
-                x: [result.x_vals[0]],
-                y: [result.y_vals[0]],
-                type: 'scatter',
-                mode: 'markers',
-                name: 'Start',
-                marker: {size: 15, color: 'green', symbol: 'circle'}
-            });
-            
-            phaseTraces.push({
-                x: [result.x_vals[result.x_vals.length-1]],
-                y: [result.y_vals[result.y_vals.length-1]],
-                type: 'scatter',
-                mode: 'markers',
-                name: 'End',
-                marker: {size: 15, color: 'red', symbol: 'square'}
-            });
-            
-            const layout2 = {
-                title: 'Phase Plot',
-                xaxis: {title: 'x (Prey/Resource)'},
-                yaxis: {title: 'y (Predator/Consumer)'},
-                plot_bgcolor: '#f8f9fa',
-                paper_bgcolor: 'white',
-                height: 500,
-                hovermode: 'closest'
-            };
+            // Create matplotlib-style plots (generate images from Python)
+            generateMatplotlibPlots(result);
+        }
+        
+        async function generateMatplotlibPlots(result) {
+            const plotCode = `
+import matplotlib.pyplot as plt
+import numpy as np
+import base64
+from io import BytesIO
+
+t_vals = np.array(${JSON.stringify(result.t_vals)})
+x_vals = np.array(${JSON.stringify(result.x_vals)})
+y_vals = np.array(${JSON.stringify(result.y_vals)})
+${result.x_rk45 ? `x_rk45 = np.array(${JSON.stringify(result.x_rk45)})` : 'x_rk45 = None'}
+${result.y_rk45 ? `y_rk45 = np.array(${JSON.stringify(result.y_rk45)})` : 'y_rk45 = None'}
+
+# Time series plot
+fig1, ax1 = plt.subplots(figsize=(12, 7))
+ax1.plot(t_vals, x_vals, 'r--', linewidth=2, label='x(t) (${result.method})')
+ax1.plot(t_vals, y_vals, 'b--', linewidth=2, label='y(t) (${result.method})')
+
+if x_rk45 is not None:
+    ax1.plot(t_vals, x_rk45, 'r-', linewidth=1, label='x(t) (RK45)', alpha=0.7)
+    ax1.plot(t_vals, y_rk45, 'b-', linewidth=1, label='y(t) (RK45)', alpha=0.7)
+
+ax1.set_xlabel('Time t', fontsize=14)
+ax1.set_ylabel('Values of x and y', fontsize=14)
+ax1.set_title('Time Series: ${result.method} vs RK45', fontsize=16, fontweight='bold')
+ax1.legend(fontsize=12)
+ax1.grid(True, alpha=0.3)
+
+# Save to base64
+buf1 = BytesIO()
+plt.savefig(buf1, format='png', dpi=100, bbox_inches='tight')
+buf1.seek(0)
+img1_base64 = base64.b64encode(buf1.read()).decode('utf-8')
+plt.close()
+
+# Phase plot
+fig2, ax2 = plt.subplots(figsize=(12, 7))
+ax2.plot(x_vals, y_vals, 'r--', linewidth=2, label='${result.method} Phase')
+
+if x_rk45 is not None:
+    ax2.plot(x_rk45, y_rk45, 'b-', linewidth=1, label='RK45 Phase', alpha=0.7)
+
+ax2.scatter([x_vals[0]], [y_vals[0]], color='green', s=200, zorder=5, label='Start', marker='o', edgecolors='black', linewidths=2)
+ax2.scatter([x_vals[-1]], [y_vals[-1]], color='red', s=200, zorder=5, label='End', marker='s', edgecolors='black', linewidths=2)
+
+ax2.set_xlabel('x (Prey/Resource)', fontsize=14)
+ax2.set_ylabel('y (Predator/Consumer)', fontsize=14)
+ax2.set_title('Phase Plot: ${result.method} vs RK45', fontsize=16, fontweight='bold')
+ax2.legend(fontsize=12)
+ax2.grid(True, alpha=0.3)
+
+# Save to base64
+buf2 = BytesIO()
+plt.savefig(buf2, format='png', dpi=100, bbox_inches='tight')
+buf2.seek(0)
+img2_base64 = base64.b64encode(buf2.read()).decode('utf-8')
+plt.close()
+
+{'img1': img1_base64, 'img2': img2_base64}
+`;
+
+            const plotResult = await pyodide.runPythonAsync(plotCode);
+            const images = plotResult.toJs();
             
             document.getElementById('plots').innerHTML = `
-                <div class="plot-container" id="plot1"></div>
-                <div class="plot-container" id="plot2"></div>
+                <div class="plot-container">
+                    <h3 style="color: #667eea; margin-bottom: 15px;">📈 Time Series Plot</h3>
+                    <img src="data:image/png;base64,${images.img1}" style="width: 100%; max-width: 1200px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+                </div>
+                <div class="plot-container" style="margin-top: 30px;">
+                    <h3 style="color: #667eea; margin-bottom: 15px;">🔄 Phase Plot</h3>
+                    <img src="data:image/png;base64,${images.img2}" style="width: 100%; max-width: 1200px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+                </div>
             `;
-            
-            Plotly.newPlot('plot1', traces, layout1);
-            Plotly.newPlot('plot2', phaseTraces, layout2);
         }
         
         // Initialize on load
