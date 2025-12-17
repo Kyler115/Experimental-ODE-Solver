@@ -159,7 +159,7 @@
         <div class="content">
             <div class="controls">
                 <div class="tabs">
-                    <!-- Pass the event explicitly (avoid relying on window.event) -->
+                    <!-- pass event explicitly so we don't rely on window.event -->
                     <button class="tab active" onclick="switchTab('1d', event)">1D</button>
                     <button class="tab" onclick="switchTab('2d', event)">2D</button>
                 </div>
@@ -267,9 +267,9 @@
             }
         }
 
-        // Escape user input safely for Python string literals
+        // Safe embedding of user-provided expressions into Python strings
         function pyStr(s) {
-            return JSON.stringify(String(s)); // includes surrounding quotes
+            return JSON.stringify(String(s));
         }
 
         async function solveSys() {
@@ -351,6 +351,7 @@ try:
 
 except Exception as e:
     result['algebraic_error'] = str(e)
+
     dx_dt = parse_expr(dx_dt_str.lower(), local_dict={'x': x},
                       transformations=standard_transformations + (implicit_multiplication_application,))
     f = lambdify(x, dx_dt, 'numpy')
@@ -406,15 +407,16 @@ dx_dt = parse_expr(dx_dt_str.lower(), local_dict={'x': x, 'y': y},
 dy_dt = parse_expr(dy_dt_str.lower(), local_dict={'x': x, 'y': y},
                   transformations=standard_transformations + (implicit_multiplication_application,))
 
+f1 = lambdify((x, y), dx_dt, 'numpy')
+f2 = lambdify((x, y), dy_dt, 'numpy')
+
 def sigma(delta_t, x_initial, y_const):
-    f1 = lambdify((x, y), dx_dt, 'numpy')
     def rhs_x(t, xval):
         return [f1(xval[0], y_const)]
     sol = solve_ivp(rhs_x, [0.0, delta_t], [x_initial], method='RK45')
     return sol.y[0, -1]
 
 def gamma(delta_t, y_initial, x_const):
-    f2 = lambdify((x, y), dy_dt, 'numpy')
     def rhs_y(t, yval):
         return [f2(x_const, yval[0])]
     sol = solve_ivp(rhs_y, [0.0, delta_t], [y_initial], method='RK45')
@@ -431,9 +433,6 @@ for k in range(n):
 
 result['x_vals'] = x_arr.tolist()
 result['y_vals'] = y_arr.tolist()
-
-f1 = lambdify((x, y), dx_dt, 'numpy')
-f2 = lambdify((x, y), dy_dt, 'numpy')
 
 def system_2d(t, z):
     return [f1(z[0], z[1]), f2(z[0], z[1])]
@@ -462,20 +461,26 @@ json.dumps(result)
             html += `<div class="method-badge">${result.method}</div>`;
 
             if (result.algebraic_found) {
-                html += '<div class="solution-item"><strong>General Solution:</strong><br>';
+                html += '<div class="solution-item">';
+                html += '<strong>General Solution:</strong><br>';
                 html += `x(t) = ${result.general_solution}`;
                 html += '</div>';
 
-                html += '<div class="solution-item"><strong>Particular Solution (with initial conditions):</strong><br>';
+                html += '<div class="solution-item">';
+                html += '<strong>Particular Solution (with initial conditions):</strong><br>';
                 html += `x(t) = ${result.particular_solution}`;
                 html += '</div>';
             } else {
-                html += '<div class="solution-item"><strong>Note:</strong> System solved numerically using RK45 method';
-                if (result.algebraic_error) html += `<br><em>Algebraic attempt: ${result.algebraic_error}</em>`;
+                html += '<div class="solution-item">';
+                html += '<strong>Note:</strong> System solved numerically using RK45 method';
+                if (result.algebraic_error) {
+                    html += `<br><em>Algebraic attempt: ${result.algebraic_error}</em>`;
+                }
                 html += '</div>';
             }
 
-            html += '<div class="solution-item"><strong>Final Value:</strong><br>';
+            html += '<div class="solution-item">';
+            html += '<strong>Final Value:</strong><br>';
             html += `x(t_final) = ${Number(result.x_vals[result.x_vals.length-1]).toFixed(6)}`;
             html += '</div>';
 
@@ -486,30 +491,30 @@ json.dumps(result)
         }
 
         async function generateMatplotlibPlot1D(result) {
-            const plotCode = `\
-import matplotlib.pyplot as plt\
-import numpy as np\
-import base64\
-from io import BytesIO\
-\
-t_vals = np.array(${JSON.stringify(result.t_vals)})\
-x_vals = np.array(${JSON.stringify(result.x_vals)})\
-\
-fig, ax = plt.subplots(figsize=(12, 7))\
-ax.plot(t_vals, x_vals, linewidth=3, label='x(t)')\
-ax.set_xlabel('Time t', fontsize=14)\
-ax.set_ylabel('x(t)', fontsize=14)\
-ax.set_title('Solution: x(t) vs t (${result.method})', fontsize=16, fontweight='bold')\
-ax.legend(fontsize=12)\
-ax.grid(True, alpha=0.3)\
-\
-buf = BytesIO()\
-plt.savefig(buf, format='png', dpi=100, bbox_inches='tight')\
-buf.seek(0)\
-img_base64 = base64.b64encode(buf.read()).decode('utf-8')\
-plt.close()\
-\
-img_base64\
+            const plotCode = `
+import matplotlib.pyplot as plt
+import numpy as np
+import base64
+from io import BytesIO
+
+t_vals = np.array(${JSON.stringify(result.t_vals)})
+x_vals = np.array(${JSON.stringify(result.x_vals)})
+
+fig, ax = plt.subplots(figsize=(12, 7))
+ax.plot(t_vals, x_vals, 'b-', linewidth=3, label='x(t)')
+ax.set_xlabel('Time t', fontsize=14)
+ax.set_ylabel('x(t)', fontsize=14)
+ax.set_title('Solution: x(t) vs t (${result.method})', fontsize=16, fontweight='bold')
+ax.legend(fontsize=12)
+ax.grid(True, alpha=0.3)
+
+buf = BytesIO()
+plt.savefig(buf, format='png', dpi=100, bbox_inches='tight')
+buf.seek(0)
+img_base64 = base64.b64encode(buf.read()).decode('utf-8')
+plt.close(fig)
+
+img_base64
 `;
 
             const imgBase64 = await pyodide.runPythonAsync(plotCode);
@@ -527,7 +532,8 @@ img_base64\
             html += '<h3>📊 Solution Information</h3>';
             html += `<div class="method-badge">${result.method}</div>`;
 
-            html += '<div class="solution-item"><strong>Final Values:</strong><br>';
+            html += '<div class="solution-item">';
+            html += '<strong>Final Values:</strong><br>';
             html += `x(t_final) = ${Number(result.x_vals[result.x_vals.length-1]).toFixed(4)}<br>`;
             html += `y(t_final) = ${Number(result.y_vals[result.y_vals.length-1]).toFixed(4)}`;
             html += '</div>';
@@ -539,69 +545,69 @@ img_base64\
         }
 
         async function generateMatplotlibPlots(result) {
-            // Avoid nested template literals (common source of "missing )" parse errors)
-            const xrk = (result.x_rk45 && Array.isArray(result.x_rk45))
-              ? `x_rk45 = np.array(${JSON.stringify(result.x_rk45)})`
-              : 'x_rk45 = None';
-            const yrk = (result.y_rk45 && Array.isArray(result.y_rk45))
-              ? `y_rk45 = np.array(${JSON.stringify(result.y_rk45)})`
-              : 'y_rk45 = None';
+            // FIX: no nested backticks inside this template literal
+            const xLine = (result.x_rk45 && Array.isArray(result.x_rk45))
+                ? "x_rk45 = np.array(" + JSON.stringify(result.x_rk45) + ")"
+                : "x_rk45 = None";
+            const yLine = (result.y_rk45 && Array.isArray(result.y_rk45))
+                ? "y_rk45 = np.array(" + JSON.stringify(result.y_rk45) + ")"
+                : "y_rk45 = None";
 
-            const plotCode = `\
-import matplotlib.pyplot as plt\
-import numpy as np\
-import base64\
-from io import BytesIO\
-\
-t_vals = np.array(${JSON.stringify(result.t_vals)})\
-x_vals = np.array(${JSON.stringify(result.x_vals)})\
-y_vals = np.array(${JSON.stringify(result.y_vals)})\
-${xrk}\
-${yrk}\
-\
-fig1, ax1 = plt.subplots(figsize=(12, 7))\
-ax1.plot(t_vals, x_vals, linewidth=2, label='x(t) (${result.method})')\
-ax1.plot(t_vals, y_vals, linewidth=2, label='y(t) (${result.method})')\
-\
-if x_rk45 is not None:\
-    ax1.plot(t_vals, x_rk45, linewidth=1, label='x(t) (RK45)', alpha=0.7)\
-    ax1.plot(t_vals, y_rk45, linewidth=1, label='y(t) (RK45)', alpha=0.7)\
-\
-ax1.set_xlabel('Time t', fontsize=14)\
-ax1.set_ylabel('Values of x and y', fontsize=14)\
-ax1.set_title('Time Series: ${result.method} vs RK45', fontsize=16, fontweight='bold')\
-ax1.legend(fontsize=12)\
-ax1.grid(True, alpha=0.3)\
-\
-buf1 = BytesIO()\
-plt.savefig(buf1, format='png', dpi=100, bbox_inches='tight')\
-buf1.seek(0)\
-img1_base64 = base64.b64encode(buf1.read()).decode('utf-8')\
-plt.close()\
-\
-fig2, ax2 = plt.subplots(figsize=(12, 7))\
-ax2.plot(x_vals, y_vals, linewidth=2, label='${result.method} Phase')\
-\
-if x_rk45 is not None:\
-    ax2.plot(x_rk45, y_rk45, linewidth=1, label='RK45 Phase', alpha=0.7)\
-\
-ax2.scatter([x_vals[0]], [y_vals[0]], s=200, zorder=5, label='Start', marker='o', edgecolors='black', linewidths=2)\
-ax2.scatter([x_vals[-1]], [y_vals[-1]], s=200, zorder=5, label='End', marker='s', edgecolors='black', linewidths=2)\
-\
-ax2.set_xlabel('x', fontsize=14)\
-ax2.set_ylabel('y', fontsize=14)\
-ax2.set_title('Phase Plot: ${result.method} vs RK45', fontsize=16, fontweight='bold')\
-ax2.legend(fontsize=12)\
-ax2.grid(True, alpha=0.3)\
-\
-buf2 = BytesIO()\
-plt.savefig(buf2, format='png', dpi=100, bbox_inches='tight')\
-buf2.seek(0)\
-img2_base64 = base64.b64encode(buf2.read()).decode('utf-8')\
-plt.close()\
-\
-import json\
-json.dumps({'img1': img1_base64, 'img2': img2_base64})\
+            const plotCode = `
+import matplotlib.pyplot as plt
+import numpy as np
+import base64
+from io import BytesIO
+import json
+
+t_vals = np.array(${JSON.stringify(result.t_vals)})
+x_vals = np.array(${JSON.stringify(result.x_vals)})
+y_vals = np.array(${JSON.stringify(result.y_vals)})
+${xLine}
+${yLine}
+
+fig1, ax1 = plt.subplots(figsize=(12, 7))
+ax1.plot(t_vals, x_vals, 'r--', linewidth=2, label='x(t) (${result.method})')
+ax1.plot(t_vals, y_vals, 'b--', linewidth=2, label='y(t) (${result.method})')
+
+if x_rk45 is not None:
+    ax1.plot(t_vals, x_rk45, 'r-', linewidth=1, label='x(t) (RK45)', alpha=0.7)
+    ax1.plot(t_vals, y_rk45, 'b-', linewidth=1, label='y(t) (RK45)', alpha=0.7)
+
+ax1.set_xlabel('Time t', fontsize=14)
+ax1.set_ylabel('Values of x and y', fontsize=14)
+ax1.set_title('Time Series: ${result.method} vs RK45', fontsize=16, fontweight='bold')
+ax1.legend(fontsize=12)
+ax1.grid(True, alpha=0.3)
+
+buf1 = BytesIO()
+plt.savefig(buf1, format='png', dpi=100, bbox_inches='tight')
+buf1.seek(0)
+img1_base64 = base64.b64encode(buf1.read()).decode('utf-8')
+plt.close(fig1)
+
+fig2, ax2 = plt.subplots(figsize=(12, 7))
+ax2.plot(x_vals, y_vals, 'r--', linewidth=2, label='${result.method} Phase')
+
+if x_rk45 is not None:
+    ax2.plot(x_rk45, y_rk45, 'b-', linewidth=1, label='RK45 Phase', alpha=0.7)
+
+ax2.scatter([x_vals[0]], [y_vals[0]], color='green', s=200, zorder=5, label='Start', marker='o', edgecolors='black', linewidths=2)
+ax2.scatter([x_vals[-1]], [y_vals[-1]], color='red', s=200, zorder=5, label='End', marker='s', edgecolors='black', linewidths=2)
+
+ax2.set_xlabel('x (Prey/Resource)', fontsize=14)
+ax2.set_ylabel('y (Predator/Consumer)', fontsize=14)
+ax2.set_title('Phase Plot: ${result.method} vs RK45', fontsize=16, fontweight='bold')
+ax2.legend(fontsize=12)
+ax2.grid(True, alpha=0.3)
+
+buf2 = BytesIO()
+plt.savefig(buf2, format='png', dpi=100, bbox_inches='tight')
+buf2.seek(0)
+img2_base64 = base64.b64encode(buf2.read()).decode('utf-8')
+plt.close(fig2)
+
+json.dumps({'img1': img1_base64, 'img2': img2_base64})
 `;
 
             const plotResultJson = await pyodide.runPythonAsync(plotCode);
