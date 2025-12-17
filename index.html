@@ -742,7 +742,11 @@ coupled_terms = '*x*y' in dx_dt_str2 or '*y*x' in dx_dt_str2 or '*x*y' in dy_dt_
 if any(ind in dx_dt_str2 or ind in dy_dt_str2 for ind in nonlinear_indicators) or coupled_terms:
     skip_algebraic = True
 
-# ---- Algebraic attempt (your logic) ----
+# Try algebraic solution
+algebraic_solvable = False
+x_vals = None
+y_vals = None
+
 if not skip_algebraic:
     try:
         algX = Eq(Derivative(xA, t), dx_dtA)
@@ -757,7 +761,7 @@ if not skip_algebraic:
             x_expr = solX.rhs
             y_expr = solY.rhs
 
-            # Apply ICs
+            # Apply initial conditions
             constants = list(x_expr.free_symbols - {t})
             if constants:
                 eq_x = Eq(x_expr.subs(t, 0), x0)
@@ -772,19 +776,19 @@ if not skip_algebraic:
                 if sol_C1_y:
                     y_expr = y_expr.subs(constants_y[0], sol_C1_y[0])
 
-            # IMPORTANT: only succeed if we can evaluate numeric arrays
-            x_tmp = np.array([complex(x_expr.subs(t, tv)).real for tv in t_vals], dtype=float)
-            y_tmp = np.array([complex(y_expr.subs(t, tv)).real for tv in t_vals], dtype=float)
+            # 🚨 CRITICAL GUARD 🚨
+            if x_expr.has(Integral, Derivative) or y_expr.has(Integral, Derivative):
+                raise Exception("Implicit algebraic solution")
 
-            x_vals = x_tmp
-            y_vals = y_tmp
+            # Numeric evaluation gate
+            x_vals = np.array([float(N(x_expr.subs(t, tv))) for tv in t_vals])
+            y_vals = np.array([float(N(y_expr.subs(t, tv))) for tv in t_vals])
+
             algebraic_solvable = True
-            x_expr_used = str(x_expr)
-            y_expr_used = str(y_expr)
 
-    except Exception as e:
-        alg_err = str(e)
+    except Exception:
         algebraic_solvable = False
+
 
 # ---- Numerical fallback (your logic, including higher-order methods) ----
 x_rk45 = None
