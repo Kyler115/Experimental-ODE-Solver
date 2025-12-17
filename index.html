@@ -269,54 +269,74 @@
   </div>
 
   <script>
+    "use strict";
+
+    // Tiny helper
+    const $ = (id) => document.getElementById(id);
+
     let pyodide = null;
     let currentTab = "1d";
 
     function setStatusOk(msg) {
-      document.getElementById("status").innerHTML = `<div class="ok">✅ ${msg}</div>`;
+      const el = $("status");
+      if (!el) return;
+      el.innerHTML = `<div class="ok">✅ ${msg}</div>`;
     }
     function setStatusErr(msg) {
-      document.getElementById("status").innerHTML = `<div class="err">❌ ${msg}</div>`;
+      const el = $("status");
+      if (!el) return;
+      el.innerHTML = `<div class="err">❌ ${msg}</div>`;
     }
     function showLoading(text) {
-      document.getElementById("loading-text").textContent = text;
-      document.getElementById("loading").classList.add("active");
+      const lt = $("loading-text");
+      const l = $("loading");
+      if (lt) lt.textContent = text;
+      if (l) l.classList.add("active");
     }
     function hideLoading() {
-      document.getElementById("loading").classList.remove("active");
+      const l = $("loading");
+      if (l) l.classList.remove("active");
     }
 
     function switchTab(tab) {
       currentTab = tab;
-      document.getElementById("tabbtn-1d").classList.toggle("active", tab === "1d");
-      document.getElementById("tabbtn-2d").classList.toggle("active", tab === "2d");
-      document.getElementById("tab-1d").classList.toggle("active", tab === "1d");
-      document.getElementById("tab-2d").classList.toggle("active", tab === "2d");
+      $("tabbtn-1d")?.classList.toggle("active", tab === "1d");
+      $("tabbtn-2d")?.classList.toggle("active", tab === "2d");
+      $("tab-1d")?.classList.toggle("active", tab === "1d");
+      $("tab-2d")?.classList.toggle("active", tab === "2d");
     }
 
-    document.getElementById("tabbtn-1d").addEventListener("click", () => switchTab("1d"));
-    document.getElementById("tabbtn-2d").addEventListener("click", () => switchTab("2d"));
-
-    async function init() {
+    async function initPyodide() {
       showLoading("Initializing Python environment...");
       try {
+        if (typeof loadPyodide !== "function") {
+          throw new Error("Pyodide script did not load (loadPyodide is undefined). If you're opening this from a file:// URL, serve it with a local web server. Also disable strict tracking prevention for cdn.jsdelivr.net or self-host pyodide.");
+        }
         pyodide = await loadPyodide();
         await pyodide.loadPackage(["numpy", "scipy", "sympy", "matplotlib"]);
         hideLoading();
         setStatusOk("Python environment ready.");
-        setTimeout(() => (document.getElementById("status").innerHTML = ""), 2200);
+        setTimeout(() => ($("status").innerHTML = ""), 2200);
       } catch (e) {
         hideLoading();
-        setStatusErr("Failed to initialize Pyodide: " + e.message);
+        setStatusErr("Failed to initialize Pyodide: " + (e?.message || String(e)));
       }
     }
 
     function escapeForPyString(s) {
-      // Safe, valid JS. (Most code paths now use JSON.stringify instead.)
-      // Escape backslashes first so we can safely embed strings if needed.
-      return String(s)
-        .replace(/\\/g, "\\\\")
-        .replace(/"""/g, "\\\"\\\"\\\"");
+      // Regex-free escape that cannot break JS parsing
+      return JSON.stringify(String(s)).slice(1, -1);
+    }
+
+    function escapeHtml(s) {
+      // Avoid replaceAll (older engines) and regex literals.
+      const str = String(s);
+      return str
+        .split("&").join("&amp;")
+        .split("<").join("&lt;")
+        .split(">\").join("&gt;")
+        .split('"').join("&quot;")
+        .split("'").join("&#039;");
     }
 
     async function solve() {
@@ -325,37 +345,35 @@
         return;
       }
 
-      document.getElementById("solve-btn").disabled = true;
-      document.getElementById("info").innerHTML = "";
-      document.getElementById("plots").innerHTML = "";
-      document.getElementById("raw").innerHTML = "";
+      $("solve-btn").disabled = true;
+      $("info").innerHTML = "";
+      $("plots").innerHTML = "";
+      $("raw").innerHTML = "";
       showLoading("Solving...");
 
       try {
         let pyCode = "";
         if (currentTab === "1d") {
-          const dx = document.getElementById("dx-1d").value;
-          const x0 = parseFloat(document.getElementById("x0-1d").value);
-          const tTotal = parseFloat(document.getElementById("t-1d").value);
-          const n = parseInt(document.getElementById("n-1d").value, 10);
-
+          const dx = $("dx-1d").value;
+          const x0 = parseFloat($("x0-1d").value);
+          const tTotal = parseFloat($("t-1d").value);
+          const n = parseInt($("n-1d").value, 10);
           pyCode = buildPython1D(dx, x0, tTotal, n);
         } else {
-          const dx = document.getElementById("dx-2d").value;
-          const dy = document.getElementById("dy-2d").value;
-          const x0 = parseFloat(document.getElementById("x0-2d").value);
-          const y0 = parseFloat(document.getElementById("y0-2d").value);
-          const tTotal = parseFloat(document.getElementById("t-2d").value);
-          const n = parseInt(document.getElementById("n-2d").value, 10);
-          const method = document.getElementById("method-2d").value;
-
+          const dx = $("dx-2d").value;
+          const dy = $("dy-2d").value;
+          const x0 = parseFloat($("x0-2d").value);
+          const y0 = parseFloat($("y0-2d").value);
+          const tTotal = parseFloat($("t-2d").value);
+          const n = parseInt($("n-2d").value, 10);
+          const method = $("method-2d").value;
           pyCode = buildPython2D(dx, dy, x0, y0, tTotal, n, method);
         }
 
         const jsonStr = await pyodide.runPythonAsync(pyCode);
         const result = JSON.parse(jsonStr);
 
-        document.getElementById("raw").innerHTML =
+        $("raw").innerHTML =
           `<div class="card"><div class="badge">Raw JSON</div><div class="mono">${escapeHtml(JSON.stringify(result, null, 2))}</div></div>`;
 
         if (!result.t_vals || !Array.isArray(result.t_vals) || result.t_vals.length < 2) {
@@ -363,631 +381,57 @@
         }
         if (currentTab === "1d") {
           if (!result.x_vals || !Array.isArray(result.x_vals) || result.x_vals.length < 2) {
-            throw new Error("Solver returned no data to plot (x_vals missing).");
+            throw new Error("Solver returned no data to plot (x_vals missing).\");
           }
           renderInfo1D(result);
           await renderPlots1D(result);
         } else {
           if (!result.x_vals || !Array.isArray(result.x_vals) || result.x_vals.length < 2 ||
               !result.y_vals || !Array.isArray(result.y_vals) || result.y_vals.length < 2) {
-            throw new Error("Solver returned no data to plot (x_vals/y_vals missing).");
+            throw new Error("Solver returned no data to plot (x_vals/y_vals missing).\");
           }
           renderInfo2D(result);
           await renderPlots2D(result);
         }
 
         setStatusOk("Solved.");
-        setTimeout(() => (document.getElementById("status").innerHTML = ""), 1800);
+        setTimeout(() => ($("status").innerHTML = ""), 1800);
 
       } catch (e) {
-        setStatusErr(e.message || String(e));
+        setStatusErr(e?.message || String(e));
       } finally {
         hideLoading();
-        document.getElementById("solve-btn").disabled = false;
+        $("solve-btn").disabled = false;
       }
     }
 
-    document.getElementById("solve-btn").addEventListener("click", solve);
+    // Wire up UI in a DOMContentLoaded handler so buttons ALWAYS work.
+    window.addEventListener("DOMContentLoaded", () => {
+      // Visible proof that JS loaded and handlers were attached
+      setStatusOk("UI ready.");
+      setTimeout(() => ($("status").innerHTML = ""), 1200);
 
-    function renderInfo1D(r) {
-      const finalX = r.x_vals[r.x_vals.length - 1];
-      let html = `<div class="card">
-        <div class="badge">${escapeHtml(r.method || "Unknown")}</div>
-        <div class="mono">dx/dt = ${escapeHtml(r.dx_dt_str || "")}
- x0 = ${r.x0}
- t_total = ${r.t_total}
- n = ${r.n}
+      // Both addEventListener and onclick fallback
+      const b1 = $("tabbtn-1d");
+      const b2 = $("tabbtn-2d");
+      const sb = $("solve-btn");
 
- Final value: x(t_final) = ${Number(finalX).toFixed(6)}
-</div>`;
-
-      if (r.algebraic_found) {
-        html += `<div class="mono">Algebraic solution found:
- x(t) = ${escapeHtml(r.x_expr || "")}</div>`;
-      } else if (r.algebraic_error) {
-        html += `<div class="mono">Algebraic attempt failed:
- ${escapeHtml(r.algebraic_error)}</div>`;
+      if (b1) {
+        b1.onclick = () => switchTab("1d");
+        b1.addEventListener("click", () => switchTab("1d"));
       }
-      html += `</div>`;
-      document.getElementById("info").innerHTML = html;
-    }
-
-    function renderInfo2D(r) {
-      const fx = r.x_vals[r.x_vals.length - 1];
-      const fy = r.y_vals[r.y_vals.length - 1];
-      let html = `<div class="card">
-        <div class="badge">${escapeHtml(r.method || "Unknown")}</div>
-        <div class="mono">dx/dt = ${escapeHtml(r.dx_dt_str || "")}
- dy/dt = ${escapeHtml(r.dy_dt_str || "")}
- x0 = ${r.x0}
- y0 = ${r.y0}
- t_total = ${r.t_total}
- n = ${r.n}
-
- Final values: x(t_final) = ${Number(fx).toFixed(6)},  y(t_final) = ${Number(fy).toFixed(6)}
-</div>`;
-
-      if (r.algebraic_found) {
-        html += `<div class="mono">Algebraic solutions found:
- x(t) = ${escapeHtml(r.x_expr || "")}
- y(t) = ${escapeHtml(r.y_expr || "")}</div>`;
-      } else if (r.algebraic_error) {
-        html += `<div class="mono">Algebraic attempt failed:
- ${escapeHtml(r.algebraic_error)}</div>`;
+      if (b2) {
+        b2.onclick = () => switchTab("2d");
+        b2.addEventListener("click", () => switchTab("2d"));
       }
-      html += `</div>`;
-      document.getElementById("info").innerHTML = html;
-    }
-
-    async function renderPlots1D(r) {
-      showLoading("Rendering Matplotlib plot...");
-      const plotPy = `
-import numpy as np
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import base64
-from io import BytesIO
-import json
-
-t_vals = np.array(${JSON.stringify(r.t_vals)})
-x_vals = np.array(${JSON.stringify(r.x_vals)})
-
-fig = plt.figure(figsize=(10, 6))
-plt.plot(t_vals, x_vals, 'r-', linewidth=2, label='x(t) (Solution)')
-
-x_rk45 = None
-try:
-    x_rk45 = np.array(${r.x_rk45 ? JSON.stringify(r.x_rk45) : "None"})
-except:
-    x_rk45 = None
-
-if x_rk45 is not None and len(x_rk45) == len(t_vals):
-    plt.plot(t_vals, x_rk45, 'b--', linewidth=1, label='x(t) (RK45)')
-
-plt.xlabel('Time t')
-plt.ylabel('x(t)')
-plt.title('1D ODE Solution')
-plt.legend()
-plt.grid(True)
-
-buf = BytesIO()
-plt.savefig(buf, format='png', dpi=140, bbox_inches='tight')
-buf.seek(0)
-img = base64.b64encode(buf.read()).decode('utf-8')
-plt.close(fig)
-
-json.dumps({"img": img})
-`;
-      const out = JSON.parse(await pyodide.runPythonAsync(plotPy));
-      document.getElementById("plots").innerHTML = `
-        <div class="plot-wrap">
-          <h3>Plot</h3>
-          <img class="plot-img" src="data:image/png;base64,${out.img}" alt="plot 1d" />
-        </div>
-      `;
-    }
-
-    async function renderPlots2D(r) {
-      showLoading("Rendering Matplotlib plots...");
-      const plotPy = `
-import numpy as np
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import base64
-from io import BytesIO
-import json
-
-t_vals = np.array(${JSON.stringify(r.t_vals)})
-x = np.array(${JSON.stringify(r.x_vals)})
-y = np.array(${JSON.stringify(r.y_vals)})
-
-x_rk45 = None
-y_rk45 = None
-try:
-    x_rk45 = np.array(${r.x_rk45 ? JSON.stringify(r.x_rk45) : "None"})
-    y_rk45 = np.array(${r.y_rk45 ? JSON.stringify(r.y_rk45) : "None"})
-except:
-    x_rk45 = None
-    y_rk45 = None
-
-method = ${JSON.stringify(r.method || "method")}
-
-fig1 = plt.figure(figsize=(10, 6))
-plt.plot(t_vals, x, 'r--', label=f'x(t) ({method})')
-plt.plot(t_vals, y, 'b--', label=f'y(t) ({method})')
-
-if x_rk45 is not None and y_rk45 is not None and len(x_rk45) == len(t_vals):
-    plt.plot(t_vals, x_rk45, 'r-', label='x(t) (RK45)')
-    plt.plot(t_vals, y_rk45, 'b-', label='y(t) (RK45)')
-
-plt.xlabel('Time t')
-plt.ylabel('Values of x and y')
-plt.title(f'Numerical Solution: {method} vs RK45')
-plt.legend()
-plt.grid(True)
-
-buf1 = BytesIO()
-plt.savefig(buf1, format='png', dpi=140, bbox_inches='tight')
-buf1.seek(0)
-img1 = base64.b64encode(buf1.read()).decode('utf-8')
-plt.close(fig1)
-
-fig2 = plt.figure(figsize=(10, 6))
-plt.plot(x, y, 'r--', label=f'{method} Phase')
-
-if x_rk45 is not None and y_rk45 is not None and len(x_rk45) == len(t_vals):
-    plt.plot(x_rk45, y_rk45, 'b-', label='RK45 Phase')
-
-plt.xlabel('x')
-plt.ylabel('y')
-plt.title(f'Phase Plot: {method} vs RK45')
-plt.legend()
-plt.grid(True)
-
-buf2 = BytesIO()
-plt.savefig(buf2, format='png', dpi=140, bbox_inches='tight')
-buf2.seek(0)
-img2 = base64.b64encode(buf2.read()).decode('utf-8')
-plt.close(fig2)
-
-json.dumps({"img1": img1, "img2": img2})
-`;
-      const out = JSON.parse(await pyodide.runPythonAsync(plotPy));
-      document.getElementById("plots").innerHTML = `
-        <div class="plot-wrap">
-          <h3>Time Series</h3>
-          <img class="plot-img" src="data:image/png;base64,${out.img1}" alt="plot timeseries" />
-        </div>
-        <div class="plot-wrap">
-          <h3>Phase Plot</h3>
-          <img class="plot-img" src="data:image/png;base64,${out.img2}" alt="plot phase" />
-        </div>
-      `;
-    }
-
-    function escapeHtml(s) {
-      return String(s)
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
-    }
-
-    function buildPython1D(dx_dt_str, x0, t_total, n) {
-      const dxEsc = escapeForPyString(dx_dt_str);
-      return `
-import numpy as np
-from sympy import *
-from sympy.parsing.sympy_parser import parse_expr, standard_transformations, implicit_multiplication_application
-from scipy.integrate import solve_ivp
-import json
-
-dx_dt_str = ${JSON.stringify(dx_dt_str)}
-dx_dt_str = dx_dt_str.replace(' ', '').lower()
-
-x0 = float(${x0})
-t_total = float(${t_total})
-n = int(${n})
-
-x = symbols('x')
-t = symbols('t')
-xFunc = Function('xA')
-xA = xFunc(t)
-
-dx_dtA = parse_expr(dx_dt_str, local_dict={'x': xA, 't': t},
-                    transformations=standard_transformations + (implicit_multiplication_application,))
-dx_dt = parse_expr(dx_dt_str, transformations=standard_transformations + (implicit_multiplication_application,),
-                   local_dict={'x': x})
-
-t_vals = np.linspace(0, t_total, n + 1)
-tol = 1e-8
-
-algebraic_solvable = False
-x_vals = None
-x_expr_used = None
-alg_err = None
-
-try:
-    algX = Eq(Derivative(xA, t), dx_dtA)
-    solX = dsolve(algX)
-    check, _ = checkodesol(algX, solX)
-
-    if check:
-        x_expr = solX.rhs
-
-        constants = list(x_expr.free_symbols - {t})
-        if constants:
-            eq_x = Eq(x_expr.subs(t, 0), x0)
-            sol_C1_x = solve(eq_x, constants[0])
-            if sol_C1_x:
-                x_expr = x_expr.subs(constants[0], sol_C1_x[0])
-
-        x_vals = np.array([complex(x_expr.subs(t, tv)).real for tv in t_vals], dtype=float)
-        algebraic_solvable = True
-        x_expr_used = str(x_expr)
-
-except Exception as e:
-    alg_err = str(e)
-
-if not algebraic_solvable:
-    f1 = lambdify(x, dx_dt, 'numpy')
-    def system_1d(tloc, x_vec):
-        return f1(x_vec[0])
-    sol = solve_ivp(system_1d, (0, t_total), [x0], t_eval=t_vals, rtol=tol, atol=tol)
-    x_vals = sol.y[0]
-
-f1_comp = lambdify(x, dx_dt, 'numpy')
-
-def system_1d_comp(tloc, x_vec):
-    return f1_comp(x_vec[0])
-
-sol_rk45 = solve_ivp(system_1d_comp, (0, t_total), [x0], t_eval=t_vals, rtol=tol, atol=tol)
-x_rk45 = sol_rk45.y[0]
-
-result = {
-    "dx_dt_str": dx_dt_str,
-    "x0": x0,
-    "t_total": t_total,
-    "n": n,
-    "t_vals": t_vals.tolist(),
-    "x_vals": [float(v) for v in np.asarray(x_vals)],
-    "x_rk45": [float(v) for v in np.asarray(x_rk45)],
-    "algebraic_found": bool(algebraic_solvable),
-    "x_expr": x_expr_used,
-    "algebraic_error": alg_err,
-    "method": "Algebraic (Exact)" if algebraic_solvable else "Numerical (RK45)"
-}
-
-json.dumps(result)
-`;
-    }
-
-    function buildPython2D(dx_dt_str, dy_dt_str, x0, y0, t_total, n, method) {
-      const dxEsc = escapeForPyString(dx_dt_str);
-      const dyEsc = escapeForPyString(dy_dt_str);
-      const methodEsc = escapeForPyString(method);
-
-      return `
-import numpy as np
-from sympy import *
-from sympy.parsing.sympy_parser import parse_expr, standard_transformations, implicit_multiplication_application
-from scipy.integrate import solve_ivp
-import json
-
-dx_dt_str = ${JSON.stringify(dx_dt_str)}.replace(' ', '').lower()
-dy_dt_str = ${JSON.stringify(dy_dt_str)}.replace(' ', '').lower()
-
-x0 = float(${x0})
-y0 = float(${y0})
-t_total = float(${t_total})
-n = int(${n})
-method = ${JSON.stringify(method)}
-
-x_sym, y_sym = symbols('x y')
-t = symbols('t')
-
-xFunc = Function('xA')
-yFunc = Function('yA')
-xA = xFunc(t)
-yA = yFunc(t)
-
-dx_dtA = parse_expr(dx_dt_str, local_dict={'x': xA, 'y': yA, 't': t},
-                    transformations=standard_transformations + (implicit_multiplication_application,))
-dy_dtA = parse_expr(dy_dt_str, local_dict={'x': xA, 'y': yA, 't': t},
-                    transformations=standard_transformations + (implicit_multiplication_application,))
-
-dx_dt = parse_expr(dx_dt_str, transformations=standard_transformations + (implicit_multiplication_application,),
-                   local_dict={'x': x_sym, 'y': y_sym})
-dy_dt = parse_expr(dy_dt_str, transformations=standard_transformations + (implicit_multiplication_application,),
-                   local_dict={'x': x_sym, 'y': y_sym})
-
-dt = t_total / n
-t_vals = np.linspace(0, t_total, n + 1)
-tol = 1e-8
-
-algebraic_solvable = False
-x_vals = None
-y_vals = None
-x_expr_used = None
-y_expr_used = None
-alg_err = None
-
-# Quick skip for obviously nonlinear/coupled systems (your heuristic)
-skip_algebraic = False
-_dx_s = str(dx_dt).lower()
-_dy_s = str(dy_dt).lower()
-nonlinear_indicators = ['**2', '**3', '*x*y', '*y*x']
-coupled_terms = '*x*y' in _dx_s or '*y*x' in _dx_s or '*x*y' in _dy_s or '*y*x' in _dy_s
-if any(ind in _dx_s or ind in _dy_s for ind in nonlinear_indicators) or coupled_terms:
-    skip_algebraic = True
-
-if not skip_algebraic:
-    try:
-        algX = Eq(Derivative(xA, t), dx_dtA)
-        solX = dsolve(algX)
-        checkX, _ = checkodesol(algX, solX)
-
-        algY = Eq(Derivative(yA, t), dy_dtA)
-        solY = dsolve(algY)
-        checkY, _ = checkodesol(algY, solY)
-
-        if checkX and checkY:
-            x_expr = solX.rhs
-            y_expr = solY.rhs
-
-            # Apply ICs
-            constants = list(x_expr.free_symbols - {t})
-            if constants:
-                eq_x = Eq(x_expr.subs(t, 0), x0)
-                sol_C1_x = solve(eq_x, constants[0])
-                if sol_C1_x:
-                    x_expr = x_expr.subs(constants[0], sol_C1_x[0])
-
-            constants_y = list(y_expr.free_symbols - {t})
-            if constants_y:
-                eq_y = Eq(y_expr.subs(t, 0), y0)
-                sol_C1_y = solve(eq_y, constants_y[0])
-                if sol_C1_y:
-                    y_expr = y_expr.subs(constants_y[0], sol_C1_y[0])
-
-            # Critical guard: reject implicit Integral/Derivative outputs
-            if x_expr.has(Integral, Derivative) or y_expr.has(Integral, Derivative):
-                raise Exception('Implicit algebraic solution')
-
-            x_vals = np.array([float(N(x_expr.subs(t, tv))) for tv in t_vals], dtype=float)
-            y_vals = np.array([float(N(y_expr.subs(t, tv))) for tv in t_vals], dtype=float)
-
-            algebraic_solvable = True
-            x_expr_used = str(x_expr)
-            y_expr_used = str(y_expr)
-
-    except Exception as e:
-        alg_err = str(e)
-        algebraic_solvable = False
-
-x_rk45 = None
-y_rk45 = None
-
-if not algebraic_solvable:
-    f1 = lambdify((x_sym, y_sym), dx_dt, 'numpy')
-    f2 = lambdify((x_sym, y_sym), dy_dt, 'numpy')
-
-    def sigma(delta_t, x_initial, y_const):
-        def rhs_x(tloc, xval):
-            return f1(xval[0], y_const)
-        sol = solve_ivp(rhs_x, [0.0, float(delta_t)], [float(x_initial)], method='RK45', rtol=tol, atol=tol)
-        return sol.y[0, -1]
-
-    def gamma(delta_t, y_initial, x_const):
-        def rhs_y(tloc, yval):
-            return f2(x_const, yval[0])
-        sol = solve_ivp(rhs_y, [0.0, float(delta_t)], [float(y_initial)], method='RK45', rtol=tol, atol=tol)
-        return sol.y[0, -1]
-
-    x = np.zeros(n + 1, dtype=complex)
-    y = np.zeros(n + 1, dtype=complex)
-    x[0] = x0
-    y[0] = y0
-
-    def compute_a_k(k):
-        return np.exp((1j * np.pi) / (2 * k + 1)) / (2 ** (1 / (2 * k + 1)) + 2 * np.exp((1j * np.pi) / (2 * k + 1)))
-
-    aa = compute_a_k(1) * compute_a_k(2)
-    bb = compute_a_k(2) * (1 - 2 * compute_a_k(1))
-    cc = compute_a_k(1) * (1 - 2 * compute_a_k(2))
-    dd = (1 - 2 * compute_a_k(1)) * (1 - 2 * compute_a_k(2))
-
-    def compute_a_k2(k):
-        return (1 / 4) + 1j * (np.sin(np.pi / (2 * k + 1))) / (4 + 4 * np.cos(np.pi / (2 * k + 1)))
-
-    a1 = compute_a_k2(1); a1b = np.conjugate(a1)
-    a2 = compute_a_k2(2); a2b = np.conjugate(a2)
-    a3 = compute_a_k2(3); a3b = np.conjugate(a3)
-    a4 = compute_a_k2(4); a4b = np.conjugate(a4)
-    a5 = compute_a_k2(5); a5b = np.conjugate(a5)
-    a6 = compute_a_k2(6); a6b = np.conjugate(a6)
-
-    if method == 'lie_trotter':
-        for k in range(n):
-            x[k + 1] = sigma(dt, x[k], y[k])
-            y[k + 1] = gamma(dt, y[k], x[k + 1])
-
-    elif method == 'strang':
-        for k in range(n):
-            x_half = sigma(dt / 2, x[k], y[k])
-            y[k + 1] = gamma(dt, y[k], x_half)
-            x[k + 1] = sigma(dt / 2, x_half, y[k + 1])
-
-    elif method == 'third':
-        aa3 = 1/2 + 1j*np.sqrt(3)/6
-        aa_bar = np.conjugate(aa3)
-        for k in range(n):
-            y1 = gamma(aa_bar * dt / 2, y[k], x[k])
-            x2 = sigma(aa_bar * dt, x[k], y1)
-            y3 = gamma(dt / 2, y1, x2)
-            x[k + 1] = sigma(aa3 * dt, x2, y3)
-            y[k + 1] = gamma(aa3 * dt / 2, y3, x[k + 1])
-
-    elif method == 'sixth':
-        for k in range(n):
-            y1 = gamma(aa * dt / 2, y[k], x[k])
-            x2 = sigma(aa * dt, x[k], y1)
-            y3 = gamma((aa + bb) * dt / 2, y1, x2)
-            x4 = sigma(bb * dt, x2, y3)
-            y5 = gamma((aa + bb) * dt / 2, y3, x4)
-            x6 = sigma(aa * dt, x4, y5)
-            y7 = gamma((aa + cc) * dt / 2, y5, x6)
-            x8 = sigma(cc * dt, x6, y7)
-            y9 = gamma((cc + dd) * dt / 2, y7, x8)
-            x10 = sigma(dd * dt, x8, y9)
-            y11 = gamma((cc + dd) * dt / 2, y9, x10)
-            x12 = sigma(cc * dt, x10, y11)
-            y13 = gamma((aa + cc) * dt / 2, y11, x12)
-            x14 = sigma(aa * dt, x12, y13)
-            y15 = gamma((aa + bb) * dt / 2, y13, x14)
-            x16 = sigma(bb * dt, x14, y15)
-            y17 = gamma((aa + bb) * dt / 2, y15, x16)
-            x[k + 1] = sigma(aa * dt, x16, y17)
-            y[k + 1] = gamma(aa * dt / 2, y17, x[k + 1])
-
-    elif method in ['eight', 'tenth', 'twelfth', 'fourteenth']:
-        def z1loop(inpt, g, h):
-            y1 = gamma(inpt * a1 * dt / 2, h, g)
-            x2 = sigma(inpt * a1 * dt, g, y1)
-            y3 = gamma(inpt * (1 / 4) * dt, y1, x2)
-            x4 = sigma(inpt * a1b * dt, x2, y3)
-            y5 = gamma(inpt * a1b * dt, y3, x4)
-            x6 = sigma(inpt * a1b * dt, x4, y5)
-            y7 = gamma(inpt * (1 / 4) * dt, y5, x6)
-            xx = sigma(inpt * a1 * dt, x6, y7)
-            yy = gamma(inpt * a1 * dt / 2, y7, xx)
-            return xx, yy
-
-        def zaloop6a(inpt, xp, yq):
-            x1, y1 = z1loop(inpt * a2, xp, yq)
-            x2, y2 = z1loop(inpt * a2b, x1, y1)
-            x3, y3 = z1loop(inpt * a2b, x2, y2)
-            x4, y4 = z1loop(inpt * a2, x3, y3)
-            return x4, y4
-
-        def zaloop8(xp, yq):
-            x1, y1 = zaloop6a(a3, xp, yq)
-            x2, y2 = zaloop6a(a3b, x1, y1)
-            x3, y3 = zaloop6a(a3b, x2, y2)
-            x4, y4 = zaloop6a(a3, x3, y3)
-            return x4, y4
-
-        def zaloop10(xp, yq):
-            def zaloop8a(inpt, xp2, yq2):
-                x1, y1 = zaloop6a(inpt * a3, xp2, yq2)
-                x2, y2 = zaloop6a(inpt * a3b, x1, y1)
-                x3, y3 = zaloop6a(inpt * a3b, x2, y2)
-                x4, y4 = zaloop6a(inpt * a3, x3, y3)
-                return x4, y4
-            x1, y1 = zaloop8a(a4, xp, yq)
-            x2, y2 = zaloop8a(a4b, x1, y1)
-            x3, y3 = zaloop8a(a4b, x2, y2)
-            x4, y4 = zaloop8a(a4, x3, y3)
-            return x4, y4
-
-        def zaloop12(xp, yq):
-            def zaloop8a(inpt, xp2, yq2):
-                x1, y1 = zaloop6a(inpt * a3, xp2, yq2)
-                x2, y2 = zaloop6a(inpt * a3b, x1, y1)
-                x3, y3 = zaloop6a(inpt * a3b, x2, y2)
-                x4, y4 = zaloop6a(inpt * a3, x3, y3)
-                return x4, y4
-            def zaloop10a(inpt, xp2, yq2):
-                x1, y1 = zaloop8a(inpt * a4, xp2, yq2)
-                x2, y2 = zaloop8a(inpt * a4b, x1, y1)
-                x3, y3 = zaloop8a(inpt * a4b, x2, y2)
-                x4, y4 = zaloop8a(inpt * a4, x3, y3)
-                return x4, y4
-            x1, y1 = zaloop10a(a5, xp, yq)
-            x2, y2 = zaloop10a(a5b, x1, y1)
-            x3, y3 = zaloop10a(a5b, x2, y2)
-            x4, y4 = zaloop10a(a5, x3, y3)
-            return x4, y4
-
-        def zaloop14(xp, yq):
-            def zaloop8a(inpt, xp2, yq2):
-                x1, y1 = zaloop6a(inpt * a3, xp2, yq2)
-                x2, y2 = zaloop6a(inpt * a3b, x1, y1)
-                x3, y3 = zaloop6a(inpt * a3b, x2, y2)
-                x4, y4 = zaloop6a(inpt * a3, x3, y3)
-                return x4, y4
-            def zaloop10a(inpt, xp2, yq2):
-                x1, y1 = zaloop8a(inpt * a4, xp2, yq2)
-                x2, y2 = zaloop8a(inpt * a4b, x1, y1)
-                x3, y3 = zaloop8a(inpt * a4b, x2, y2)
-                x4, y4 = zaloop8a(inpt * a4, x3, y3)
-                return x4, y4
-            def zaloop12a(inpt, xp2, yq2):
-                x1, y1 = zaloop10a(inpt * a5, xp2, yq2)
-                x2, y2 = zaloop10a(inpt * a5b, x1, y1)
-                x3, y3 = zaloop10a(inpt * a5b, x2, y2)
-                x4, y4 = zaloop10a(inpt * a5, x3, y3)
-                return x4, y4
-            x1, y1 = zaloop12a(a6, xp, yq)
-            x2, y2 = zaloop12a(a6b, x1, y1)
-            x3, y3 = zaloop12a(a6b, x2, y2)
-            x4, y4 = zaloop12a(a6, x3, y3)
-            return x4, y4
-
-        if method == 'eight':
-            for k in range(n):
-                x[k + 1], y[k + 1] = zaloop8(x[k], y[k])
-        elif method == 'tenth':
-            for k in range(n):
-                x[k + 1], y[k + 1] = zaloop10(x[k], y[k])
-        elif method == 'twelfth':
-            for k in range(n):
-                x[k + 1], y[k + 1] = zaloop12(x[k], y[k])
-        elif method == 'fourteenth':
-            for k in range(n):
-                x[k + 1], y[k + 1] = zaloop14(x[k], y[k])
-
-    else:
-        raise ValueError('Invalid method.')
-
-    def system_of_equation(tloc, z):
-        xval, yval = z
-        return [f1(xval, yval), f2(xval, yval)]
-
-    sol = solve_ivp(system_of_equation, (0, t_total), [x0, y0], t_eval=t_vals, rtol=tol, atol=tol)
-    x_rk45 = sol.y[0]
-    y_rk45 = sol.y[1]
-
-    x_vals = np.real(x)
-    y_vals = np.real(y)
-
-result = {
-    'dx_dt_str': dx_dt_str,
-    'dy_dt_str': dy_dt_str,
-    'x0': x0,
-    'y0': y0,
-    't_total': t_total,
-    'n': n,
-    't_vals': t_vals.tolist(),
-    'x_vals': [float(v) for v in np.asarray(x_vals, dtype=float)],
-    'y_vals': [float(v) for v in np.asarray(y_vals, dtype=float)],
-    'x_rk45': None if x_rk45 is None else [float(v) for v in np.asarray(x_rk45, dtype=float)],
-    'y_rk45': None if y_rk45 is None else [float(v) for v in np.asarray(y_rk45, dtype=float)],
-    'algebraic_found': bool(algebraic_solvable),
-    'x_expr': x_expr_used,
-    'y_expr': y_expr_used,
-    'algebraic_error': alg_err,
-    'method': 'Algebraic (Exact)' if algebraic_solvable else method
-}
-
-json.dumps(result)
-`;
-    }
-
-    window.addEventListener("load", init);
+      if (sb) {
+        sb.onclick = solve;
+        sb.addEventListener("click", solve);
+      }
+
+      // Init Pyodide after wiring UI so tabs work even if Pyodide fails.
+      initPyodide();
+    });
   </script>
 </body>
 </html>
