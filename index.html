@@ -406,52 +406,44 @@ result = {
     't_vals': t_vals.tolist()
 }
 
-# Check if nonlinear first
-dx_dt_lower = dx_dt_str.lower()
-is_nonlinear = any(term in dx_dt_lower for term in ['**2', '**3', '**4', 'x**', 'sin', 'cos', 'tan', 'exp', 'log', 'sqrt'])
-
-# Try algebraic solution only if likely linear
-if not is_nonlinear:
-    try:
-        xFunc = Function('xA')
-        xA = xFunc(t)
+# Try algebraic solution
+try:
+    xFunc = Function('xA')
+    xA = xFunc(t)
+    
+    dx_dtA = parse_expr(dx_dt_str.lower(), local_dict={'x': xA, 't': t},
+                       transformations=standard_transformations + (implicit_multiplication_application,))
+    dx_dt = parse_expr(dx_dt_str.lower(), local_dict={'x': x},
+                      transformations=standard_transformations + (implicit_multiplication_application,))
+    
+    algX = Eq(Derivative(xA, t), dx_dtA)
+    solX = dsolve(algX)
+    check, _ = checkodesol(algX, solX)
+    
+    if check:
+        x_expr = solX.rhs
+        result['general_solution'] = str(x_expr)
+        result['algebraic_found'] = True
         
-        dx_dtA = parse_expr(dx_dt_str.lower(), local_dict={'x': xA, 't': t},
-                           transformations=standard_transformations + (implicit_multiplication_application,))
-        dx_dt = parse_expr(dx_dt_str.lower(), local_dict={'x': x},
-                          transformations=standard_transformations + (implicit_multiplication_application,))
+        # Apply initial conditions
+        constants = list(x_expr.free_symbols - {t})
+        if constants:
+            eq_x = Eq(x_expr.subs(t, 0), x0)
+            sol_C1 = solve(eq_x, constants[0])
+            if sol_C1:
+                x_expr = x_expr.subs(constants[0], sol_C1[0])
         
-        algX = Eq(Derivative(xA, t), dx_dtA)
-        solX = dsolve(algX)
-        check, _ = checkodesol(algX, solX)
+        result['particular_solution'] = str(x_expr)
+        result['method'] = 'Algebraic (Exact)'
         
-        if check:
-            x_expr = solX.rhs
-            result['general_solution'] = str(x_expr)
-            result['algebraic_found'] = True
-            
-            # Apply initial conditions
-            constants = list(x_expr.free_symbols - {t})
-            if constants:
-                eq_x = Eq(x_expr.subs(t, 0), x0)
-                sol_C1 = solve(eq_x, constants[0])
-                if sol_C1:
-                    x_expr = x_expr.subs(constants[0], sol_C1[0])
-            
-            result['particular_solution'] = str(x_expr)
-            result['method'] = 'Algebraic (Exact)'
-            
-            x_vals = np.array([complex(x_expr.subs(t, tv)).real for tv in t_vals])
-            result['x_vals'] = x_vals.tolist()
-        else:
-            raise Exception("Check failed")
-            
-    except Exception as e:
-        result['algebraic_error'] = str(e)
-        is_nonlinear = True
-
-# Numerical solution if nonlinear or algebraic failed
-if is_nonlinear or not result['algebraic_found']:
+        x_vals = np.array([complex(x_expr.subs(t, tv)).real for tv in t_vals])
+        result['x_vals'] = x_vals.tolist()
+    else:
+        raise Exception("Not algebraically solvable")
+        
+except Exception as e:
+    result['algebraic_error'] = str(e)
+    # Numerical solution
     dx_dt = parse_expr(dx_dt_str.lower(), local_dict={'x': x},
                       transformations=standard_transformations + (implicit_multiplication_application,))
     f = lambdify(x, dx_dt, 'numpy')
@@ -511,14 +503,7 @@ dy_dt = parse_expr(dy_dt_str.lower(), local_dict={'x': x, 'y': y},
 
 dx_str = str(dx_dt).lower()
 dy_str = str(dy_dt).lower()
-
-# More comprehensive nonlinear detection
-nonlinear_indicators = ['**2', '**3', '**4', '*x*y', '*y*x', 'x**', 'y**', 'sin', 'cos', 'tan', 'exp', 'log', 'sqrt']
-is_nonlinear = any(ind in dx_str or ind in dy_str for ind in nonlinear_indicators)
-
-# Also check for products
-if 'x*y' in dx_str or 'y*x' in dx_str or 'x*y' in dy_str or 'y*x' in dy_str:
-    is_nonlinear = True
+is_nonlinear = any(ind in dx_str or ind in dy_str for ind in ['**2', '**3', '*x*y', '*y*x'])
 
 if not is_nonlinear:
     try:
@@ -614,8 +599,23 @@ if is_nonlinear or not result['algebraic_found']:
         return [f1(z[0], z[1]), f2(z[0], z[1])]
     
     sol_rk45 = solve_ivp(system_2d, (0, t_total), [x0, y0], t_eval=t_vals, method='RK45')
-    result['x_rk45'] = sol_rk45.y[0].tolist()
-    result['y_rk45'] = sol_rk45.y[1].tolist()
+    
+    # Check RK45 for NaN/Inf
+    if sol_rk45.success and len(sol_rk45.y[0]) == len(t_vals):
+        x_rk45_vals = sol_rk45.y[0]
+        y_rk45_vals = sol_rk45.y[1]
+        
+        if np.any(np.isnan(x_rk45_vals)) or np.any(np.isinf(x_rk45_vals)) or np.any(np.isnan(y_rk45_vals)) or np.any(np.isinf(y_rk45_vals)):
+            result['rk45_warning'] = 'RK45 also encountered instability'
+            x_rk45_clean = [None if (np.isnan(v) or np.isinf(v)) else float(v) for v in x_rk45_vals]
+            y_rk45_clean = [None if (np.isnan(v) or np.isinf(v)) else float(v) for v in y_rk45_vals]
+            result['x_rk45'] = x_rk45_clean
+            result['y_rk45'] = y_rk45_clean
+        else:
+            result['x_rk45'] = x_rk45_vals.tolist()
+            result['y_rk45'] = y_rk45_vals.tolist()
+    else:
+        result['rk45_warning'] = 'RK45 solver failed or stopped early'
 
 json.dumps(result)
                     `);
@@ -655,9 +655,19 @@ json.dumps(result)
                 html += '</div>';
             }
             
+            if (result.warning) {
+                html += '<div class="solution-item" style="background: #fff3cd; border-left-color: #ffc107;">';
+                html += `<strong>⚠️ Warning:</strong> ${result.warning}`;
+                if (result.bad_time) {
+                    html += `<br>Solution became unstable around t = ${result.bad_time.toFixed(2)}`;
+                }
+                html += '</div>';
+            }
+            
             html += '<div class="solution-item">';
             html += '<strong>Final Value:</strong><br>';
-            html += `x(t_final) = ${result.x_vals[result.x_vals.length-1].toFixed(6)}`;
+            const finalVal = result.x_vals[result.x_vals.length-1];
+            html += `x(t_final) = ${finalVal === null ? 'NaN/Inf (unstable)' : finalVal.toFixed(6)}`;
             html += '</div>';
             
             html += '</div>';
@@ -731,11 +741,28 @@ img_base64
                 html += '</div>';
             }
             
+            if (result.warning) {
+                html += '<div class="solution-item" style="background: #fff3cd; border-left-color: #ffc107;">';
+                html += `<strong>⚠️ Warning:</strong> ${result.warning}`;
+                if (result.bad_time) {
+                    html += `<br>Solution became unstable around t = ${result.bad_time.toFixed(2)}`;
+                }
+                html += '</div>';
+            }
+            
+            if (result.rk45_warning) {
+                html += '<div class="solution-item" style="background: #fff3cd; border-left-color: #ffc107;">';
+                html += `<strong>⚠️ RK45:</strong> ${result.rk45_warning}`;
+                html += '</div>';
+            }
+            
             // Add final values
             html += '<div class="solution-item">';
             html += '<strong>Final Values:</strong><br>';
-            html += `x(t_final) = ${result.x_vals[result.x_vals.length-1].toFixed(4)}<br>`;
-            html += `y(t_final) = ${result.y_vals[result.y_vals.length-1].toFixed(4)}`;
+            const finalX = result.x_vals[result.x_vals.length-1];
+            const finalY = result.y_vals[result.y_vals.length-1];
+            html += `x(t_final) = ${finalX === null ? 'NaN/Inf (unstable)' : finalX.toFixed(4)}<br>`;
+            html += `y(t_final) = ${finalY === null ? 'NaN/Inf (unstable)' : finalY.toFixed(4)}`;
             html += '</div>';
             
             html += '</div>';
