@@ -415,7 +415,7 @@ json.dumps(result)
                     `;
 
                     result = await pyodide.runPythonAsync(py);
-                    displayResults1D(JSON.parse(result));
+                    await displayResults1D(JSON.parse(result));
 
                 } else {
                     const dx = document.getElementById('dx-2d').value;
@@ -510,7 +510,7 @@ json.dumps(result)
                     `;
 
                     result = await pyodide.runPythonAsync(py);
-                    displayResults2D(JSON.parse(result));
+                    await displayResults2D(JSON.parse(result));
                 }
 
             } catch (error) {
@@ -521,7 +521,7 @@ json.dumps(result)
             }
         }
 
-        function displayResults1D(result) {
+        async function displayResults1D(result) {
             let html = '<div class="solution-box">';
             html += '<h3>📊 Solution Information</h3>';
             html += `<div class="method-badge">${result.method}</div>`;
@@ -553,7 +553,11 @@ json.dumps(result)
             html += '</div>';
             document.getElementById('solution-info').innerHTML = html;
 
-            generateMatplotlibPlot1D(result);
+            try {
+                await generateMatplotlibPlot1D(result);
+            } catch (e) {
+                document.getElementById('status').innerHTML = `<div class="error">❌ Plot error: ${e?.message || e}</div>`;
+            }
         }
 
         async function generateMatplotlibPlot1D(result) {
@@ -583,7 +587,8 @@ plt.close(fig)
 img_base64
 `;
 
-            const imgBase64 = await pyodide.runPythonAsync(plotCode);
+            const imgBase64Raw = await pyodide.runPythonAsync(plotCode);
+            const imgBase64 = String(imgBase64Raw).trim();
 
             document.getElementById('plots').innerHTML = `
                 <div class="plot-container">
@@ -593,7 +598,7 @@ img_base64
             `;
         }
 
-        function displayResults2D(result) {
+        async function displayResults2D(result) {
             let html = '<div class="solution-box">';
             html += '<h3>📊 Solution Information</h3>';
             html += `<div class="method-badge">${result.method}</div>`;
@@ -613,7 +618,11 @@ img_base64
             html += '</div>';
             document.getElementById('solution-info').innerHTML = html;
 
-            generateMatplotlibPlots(result);
+            try {
+                await generateMatplotlibPlots(result);
+            } catch (e) {
+                document.getElementById('status').innerHTML = `<div class="error">❌ Plot error: ${e?.message || e}</div>`;
+            }
         }
 
         async function generateMatplotlibPlots(result) {
@@ -681,7 +690,8 @@ plt.close(fig2)
 json.dumps({'img1': img1_base64, 'img2': img2_base64})
 `;
 
-            const plotResultJson = await pyodide.runPythonAsync(plotCode);
+            const plotResultJsonRaw = await pyodide.runPythonAsync(plotCode);
+            const plotResultJson = String(plotResultJsonRaw).trim();
             const images = JSON.parse(plotResultJson);
 
             document.getElementById('plots').innerHTML = `
