@@ -313,9 +313,10 @@
 
     function escapeForPyString(s) {
       // Safe, valid JS. (Most code paths now use JSON.stringify instead.)
+      // Escape backslashes first so we can safely embed strings if needed.
       return String(s)
-        .replace(/\/g, "\\")
-        .replace(/"""/g, "\\"\\"\\"");
+        .replace(/\\/g, "\\\\")
+        .replace(/"""/g, "\\\"\\\"\\\"");
     }
 
     async function solve() {
