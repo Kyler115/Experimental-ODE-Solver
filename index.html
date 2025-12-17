@@ -351,7 +351,7 @@ x = symbols('x')
 t = symbols('t')
 
 # Allow common functions like sin/cos/exp/log/sqrt and constant pi
-G = {'sin': sin, 'cos': cos, 'tan': tan, 'exp': exp, 'sqrt': sqrt, 'log': log, 'pi': pi}
+G = {'sin': sin, 'cos': cos, 'tan': tan, 'exp': exp, 'sqrt': sqrt, 'log': log, 'pi': pi, 'Float': Float, 'Integer': Integer, 'Rational': Rational}
 
 # Evaluate grid
 if n < 1:
@@ -444,7 +444,7 @@ method = ${pyStr(method)}
 x, y = symbols('x y')
 t = symbols('t')
 
-G = {'sin': sin, 'cos': cos, 'tan': tan, 'exp': exp, 'sqrt': sqrt, 'log': log, 'pi': pi}
+G = {'sin': sin, 'cos': cos, 'tan': tan, 'exp': exp, 'sqrt': sqrt, 'log': log, 'pi': pi, 'Float': Float, 'Integer': Integer, 'Rational': Rational}
 
 if n < 1:
     n = 1
