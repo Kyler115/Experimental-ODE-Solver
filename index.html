@@ -312,7 +312,7 @@
     }
 
     function escapeForPyString(s) {
-      // Legacy helper (kept for compatibility). Prefer JSON.stringify when embedding strings into Python.
+      // Safe, valid JS. (Most code paths now use JSON.stringify instead.)
       return String(s)
         .replace(/\/g, "\\")
         .replace(/"""/g, "\\"\\"\\"");
