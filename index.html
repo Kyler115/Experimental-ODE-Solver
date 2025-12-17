@@ -312,8 +312,10 @@
     }
 
     function escapeForPyString(s) {
-      // Put JS string safely into Python triple-quoted string
-      return s.replace(/\/g, "\\").replace(/\"\"\"/g, '\"\"\"');
+      // Legacy helper (kept for compatibility). Prefer JSON.stringify when embedding strings into Python.
+      return String(s)
+        .replace(/\/g, "\\")
+        .replace(/"""/g, "\\"\\"\\"");
     }
 
     async function solve() {
@@ -582,7 +584,7 @@ from sympy.parsing.sympy_parser import parse_expr, standard_transformations, imp
 from scipy.integrate import solve_ivp
 import json
 
-dx_dt_str = """${dxEsc}"""
+dx_dt_str = ${JSON.stringify(dx_dt_str)}
 dx_dt_str = dx_dt_str.replace(' ', '').lower()
 
 x0 = float(${x0})
@@ -674,14 +676,14 @@ from sympy.parsing.sympy_parser import parse_expr, standard_transformations, imp
 from scipy.integrate import solve_ivp
 import json
 
-dx_dt_str = """${dxEsc}""".replace(' ', '').lower()
-dy_dt_str = """${dyEsc}""".replace(' ', '').lower()
+dx_dt_str = ${JSON.stringify(dx_dt_str)}.replace(' ', '').lower()
+dy_dt_str = ${JSON.stringify(dy_dt_str)}.replace(' ', '').lower()
 
 x0 = float(${x0})
 y0 = float(${y0})
 t_total = float(${t_total})
 n = int(${n})
-method = """${methodEsc}"""
+method = ${JSON.stringify(method)}
 
 x_sym, y_sym = symbols('x y')
 t = symbols('t')
